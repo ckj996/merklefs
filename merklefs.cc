@@ -1,8 +1,9 @@
 /*
-  FUSE: Filesystem in Userspace
+  MarkleFS: markle-tree filesystem (FUSE)
   Copyright (C) 2001-2007  Miklos Szeredi <miklos@szeredi.hu>
   Copyright (C) 2017       Nikolaus Rath <Nikolaus@rath.org>
   Copyright (C) 2018       Valve, Inc
+  Copyright (C) 2021       Kaijie Chen <chen@kaijie.org>
 
   This program can be distributed under the terms of the GNU GPLv2.
   See the file COPYING.
@@ -10,37 +11,20 @@
 
 /** @file
  *
- * This is a "high-performance" version of passthrough_ll.c. While
- * passthrough_ll.c is designed to be as simple as possible, this
- * example intended to be as efficient and correct as possible.
+ * MerkleFS builds a read-only filesystem from a "metadata" file.
+ * OverlayFS should be used to support writes.
  *
- * passthrough_hp.cc mirrors a specified "source" directory under a
- * specified the mountpoint with as much fidelity and performance as
- * possible.
+ * 3 types of filemodes are supported: REG, DIR, and SYMLINK.
+ * The content of REG files is stored as blobs in a "pool".
+ * Those blobs are names in their hash value, and were referenced
+ * by the hash value in "metadata". File contents are served using
+ * FUSE passthrough to be as efficient and correct as possible.
  *
- * If --nocache is specified, the source directory may be changed
- * directly even while mounted and the filesystem will continue
- * to work correctly.
- *
- * Without --nocache, the source directory is assumed to be modified
- * only through the passthrough filesystem. This enables much better
- * performance, but if changes are made directly to the source, they
- * may not be immediately visible under the mountpoint and further
- * access to the mountpoint may result in incorrect behavior,
- * including data-loss.
- *
- * On its own, this filesystem fulfills no practical purpose. It is
- * intended as a template upon which additional functionality can be
- * built.
- *
- * Unless --nocache is specified, is only possible to write to files
- * for which the mounting user has read permissions. This is because
- * the writeback cache requires the kernel to be able to issue read
- * requests for all files (which the passthrough filesystem cannot
- * satisfy if it can't read the file in the underlying filesystem).
+ * If any blob is missing in this "pool", MerkleFS will try to
+ * fetch it from "remote", and file contents can be loaded lazily.
  *
  * ## Source code ##
- * \include passthrough_hp.cc
+ * \include merklefs.cc
  */
 
 #define FUSE_USE_VERSION 35
@@ -1262,4 +1246,3 @@ err_out1:
 
     return ret ? 1 : 0;
 }
-
