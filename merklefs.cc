@@ -1130,7 +1130,8 @@ static cxxopts::ParseResult parse_options(int argc, char **argv) {
         ("help", "Print help")
         ("nocache", "Disable all caching")
         ("nosplice", "Do not use splice(2) to transfer data")
-        ("single", "Run single-threaded");
+        ("single", "Run single-threaded")
+        ("o", "FUSE mount option", cxxopts::value<std::vector<std::string>>());
 
     // FIXME: Find a better way to limit the try clause to just
     // opt_parser.parse() (cf. https://github.com/jarro2783/cxxopts/issues/146)
@@ -1211,6 +1212,16 @@ int main(int argc, char *argv[]) {
         fuse_opt_add_arg(&args, "default_permissions,fsname=hpps") ||
         (options.count("debug-fuse") && fuse_opt_add_arg(&args, "-odebug")))
         errx(3, "ERROR: Out of memory");
+
+    auto fuseopts = options.count("o")
+	    ? options["o"].as<std::vector<std::string>>()
+	    : std::vector<std::string>();
+
+    for (auto& opt : fuseopts) {
+        if (fuse_opt_add_arg(&args, "-o") ||
+            fuse_opt_add_arg(&args, opt.c_str()))
+            errx(3, "ERROR: Out of memory");
+    }
 
     fuse_lowlevel_ops sfs_oper {};
     assign_operations(sfs_oper);
