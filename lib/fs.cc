@@ -30,6 +30,18 @@ int FileSystem::symlink(const char *target, const char *name) {
     return linkat(root_ino_, name, ino);
 }
 
+int FileSystem::link(const char *oldname, const char *name) {
+    ino_t ino = lookup(root_ino_, oldname);
+    if (ino == 0) {
+        return -ENONET;
+    }
+    int err = linkat(root_ino_, name, ino);
+    if (err != 0) {
+        return err;
+    }
+    return unlinkat(root_ino_, oldname);
+}
+
 ino_t FileSystem::mknod(mode_t mode) {
     inodes_.push_back(Inode(*this, mode));
     return inodes_.back().ino();
