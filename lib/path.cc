@@ -9,6 +9,9 @@ std::string pathsep(const char *&path)
     const char *p = path;
     std::string s;
 
+    if (path == nullptr) {
+        return "";
+    }
     while (*path == SEP) {
         ++path;
     }

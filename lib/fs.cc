@@ -13,19 +13,22 @@ FileSystem::FileSystem(ino_t root) : root_ino_(root), mnt_ts_(time(nullptr)) {
     mknod(S_IFDIR | 0755); // create root directory
 };
 
-/*
+
 int FileSystem::creat(const char *name, mode_t mode) {
-    return mknod(S_IFREG | mode);
+    ino_t ino = mknod(S_IFREG | mode);
+    return linkat(root_ino_, name, ino);
 }
 
-int FileSystem::mkdir(mode_t mode) {
-    return mknod(S_IFDIR | mode);
+int FileSystem::mkdir(const char *name, mode_t mode) {
+    ino_t ino = mknod(S_IFDIR | mode);
+    return linkat(root_ino_, name, ino);
 }
 
-int FileSystem::symlink() {
-    return mknod(S_IFLNK | ACCESSPERMS);
+int FileSystem::symlink(const char *target, const char *name) {
+    (void) target;
+    ino_t ino = mknod(S_IFLNK | ACCESSPERMS);
+    return linkat(root_ino_, name, ino);
 }
-*/
 
 ino_t FileSystem::mknod(mode_t mode) {
     inodes_.push_back(Inode(*this, mode));
@@ -48,10 +51,52 @@ ino_t FileSystem::lookup(ino_t parent, const char *name)
         if (!dir.is_dir()) {
             return 0;
         }
-        auto tmp = pathsep(name);
-        parent = dir.dirents()[tmp];
+        auto step = pathsep(name);
+        parent = dir.dirents()[step];
     }
     return parent;
+}
+
+int FileSystem::linkat(ino_t parent, const char *name, ino_t target)
+{
+    while (name != nullptr && *name) {
+        if (parent == 0) {
+            return -ENOENT;
+        }
+        Inode& dir = (*this)[parent];
+        if (!dir.is_dir()) {
+            return -ENOTDIR;
+        }
+        auto step = pathsep(name);
+        if (name == nullptr) {
+            dir.dirents()[step] = target;
+        } else {
+            parent = dir.dirents()[step];
+        }
+    }
+    return 0;
+}
+
+int FileSystem::unlinkat(ino_t parent, const char *name)
+{
+    while (name != nullptr && *name) {
+        if (parent == 0) {
+            return -ENOENT;
+        }
+        Inode& dir = (*this)[parent];
+        if (!dir.is_dir()) {
+            return -ENOTDIR;
+        }
+        auto step = pathsep(name);
+        if (name == nullptr) {
+            if (dir.dirents().erase(step) == 0) {
+                return -ENOENT;
+            }
+        } else {
+            parent = dir.dirents()[step];
+        }
+    }
+    return 0;
 }
 
 Inode::Inode(FileSystem& fs, mode_t mode)

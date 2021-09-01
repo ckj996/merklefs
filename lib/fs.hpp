@@ -15,14 +15,16 @@ class FileSystem {
   public:
     FileSystem(ino_t root = 1);
     Inode& operator[](ino_t ino);
-    ino_t lookup(ino_t parent, const char *name);
     ino_t next_ino();
-    //int creat(const char* name, mode_t mode);
-    //int mkdir(const char* name, mode_t mode);
-    //int mknod_symlink(const char* name, const char *link);
+    ino_t lookup(ino_t parent, const char *name);
+    int creat(const char* name, mode_t mode);
+    int mkdir(const char* name, mode_t mode);
+    int symlink(const char* target, const char *name);
     //int link(const char* oldpath, const char *newpath);
   private:
     ino_t mknod(mode_t mode);
+    int linkat(ino_t parent, const char *name, ino_t target);
+    int unlinkat(ino_t parent, const char *name);
     std::vector<Inode> inodes_;
     ino_t root_ino_;
     time_t mnt_ts_;
