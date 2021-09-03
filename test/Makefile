@@ -1,30 +1,23 @@
 CXX=g++
-CPPFLAGS=-O3 -Wall -Wextra -std=c++17
+CXXFLAGS=-O3 -Wall -Wextra -std=c++17
 LDLIBS=-I ../lib
 RM=rm -rf
 TARGETS=test_config test_path test_fs
 
 all:$(TARGETS)
 
-test_config: test_config.cc config.o
-	$(CXX) -o $@ $^ $(LDLIBS) $(CPPFLAGS)
+%: %.cc libmerkle.a
+	$(CXX) -o $@ $^ $(LDLIBS) $(CXXFLAGS)
 
-config.o: ../lib/config.cc
-	$(CXX) -c $^ $(LDLIBS) $(CPPFLAGS)
+%.o: ../lib/%.cc
+	$(CXX) -c $^ $(LDLIBS) $(CXXFLAGS)
 
-test_path: test_path.cc path.o
-	$(CXX) -o $@ $^ $(LDLIBS) $(CPPFLAGS)
+libmerkle.a: fs.o path.o config.o
+	ar rcs $@ $^
 
-path.o: ../lib/path.cc
-	$(CXX) -c $^ $(LDLIBS) $(CPPFLAGS)
-
-test_fs: test_fs.cc fs.o path.o
-	$(CXX) -o $@ $^ $(LDLIBS) $(CPPFLAGS)
-
-fs.o: ../lib/fs.cc
-	$(CXX) -c $^ $(LDLIBS) $(CPPFLAGS)
+libs: libmerkle.a
 
 .PHONY: clean
 
 clean:
-	$(RM) $(TARGETS) *.o
+	$(RM) $(TARGETS) *.o *.a
