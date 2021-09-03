@@ -16,6 +16,7 @@ int main()
     cout << fs.lookup(1, "/foo") << endl;
     cout << fs.lookup(1, "/bar") << endl;
     cout << fs.lookup(1, "/bar/baz") << endl;
+    cout << fs.lookup(1, "hi") << endl;
 
     cout << "unlink'/foo' " << fs.unlinkat(1, "/foo") << endl;
     cout << "link '/bar/baz' '/hello' " << fs.link("/bar/baz", "/hi") << endl;
@@ -24,6 +25,15 @@ int main()
     cout << fs.lookup(1, "/bar") << endl;
     cout << fs.lookup(1, "/bar/baz") << endl;
     cout << fs.lookup(1, "hi") << endl;
+
+    nlohmann::json j = fs;
+    cout << j << endl;
+
+    auto tmp = j.get<FileSystem>();
+    cout << tmp.lookup(1, "/foo") << endl;
+    cout << tmp.lookup(1, "/bar") << endl;
+    cout << tmp.lookup(1, "/bar/baz") << endl;
+    cout << tmp.lookup(1, "hi") << endl;
 
     return 0;
 }

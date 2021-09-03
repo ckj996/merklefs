@@ -12,8 +12,8 @@ all:$(TARGETS)
 %: %.cc libmerkle.a
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDLIBS) $(LDFLAGS)
 
-%.o: ../lib/%.cc
-	$(CXX) $(CXXFLAGS) -c $^ $(LDLIBS) $(LDFLAGS)
+%.o: ../lib/%.cc ../lib/%.hpp
+	$(CXX) $(CXXFLAGS) -c $< $(LDLIBS) $(LDFLAGS)
 
 libmerkle.a: $(OBJECTS)
 	ar rcs $@ $^
