@@ -1069,40 +1069,40 @@ static void sfs_removexattr(fuse_req_t req, fuse_ino_t ino, const char *name) {
 static void assign_operations(fuse_lowlevel_ops &sfs_oper) {
     sfs_oper.init = sfs_init;
     sfs_oper.lookup = sfs_lookup;
-    sfs_oper.mkdir = sfs_mkdir;
-    sfs_oper.mknod = sfs_mknod;
-    sfs_oper.symlink = sfs_symlink;
-    sfs_oper.link = sfs_link;
-    sfs_oper.unlink = sfs_unlink;
-    sfs_oper.rmdir = sfs_rmdir;
-    sfs_oper.rename = sfs_rename;
-    sfs_oper.forget = sfs_forget;
-    sfs_oper.forget_multi = sfs_forget_multi;
+//    sfs_oper.mkdir = sfs_mkdir;
+//    sfs_oper.mknod = sfs_mknod;
+//    sfs_oper.symlink = sfs_symlink;
+//    sfs_oper.link = sfs_link;
+//    sfs_oper.unlink = sfs_unlink;
+//    sfs_oper.rmdir = sfs_rmdir;
+//    sfs_oper.rename = sfs_rename;
+//    sfs_oper.forget = sfs_forget;
+//    sfs_oper.forget_multi = sfs_forget_multi;
     sfs_oper.getattr = sfs_getattr;
-    sfs_oper.setattr = sfs_setattr;
-    sfs_oper.readlink = sfs_readlink;
+//    sfs_oper.setattr = sfs_setattr;
+//    sfs_oper.readlink = sfs_readlink;
     sfs_oper.opendir = sfs_opendir;
     sfs_oper.readdir = sfs_readdir;
-    sfs_oper.readdirplus = sfs_readdirplus;
+//    sfs_oper.readdirplus = sfs_readdirplus;
     sfs_oper.releasedir = sfs_releasedir;
-    sfs_oper.fsyncdir = sfs_fsyncdir;
-    sfs_oper.create = sfs_create;
-    sfs_oper.open = sfs_open;
-    sfs_oper.release = sfs_release;
-    sfs_oper.flush = sfs_flush;
-    sfs_oper.fsync = sfs_fsync;
-    sfs_oper.read = sfs_read;
-    sfs_oper.write_buf = sfs_write_buf;
-    sfs_oper.statfs = sfs_statfs;
+//    sfs_oper.fsyncdir = sfs_fsyncdir;
+//    sfs_oper.create = sfs_create;
+//    sfs_oper.open = sfs_open;
+//    sfs_oper.release = sfs_release;
+//    sfs_oper.flush = sfs_flush;
+//    sfs_oper.fsync = sfs_fsync;
+//    sfs_oper.read = sfs_read;
+//    sfs_oper.write_buf = sfs_write_buf;
+//    sfs_oper.statfs = sfs_statfs;
 #ifdef HAVE_POSIX_FALLOCATE
-    sfs_oper.fallocate = sfs_fallocate;
+//    sfs_oper.fallocate = sfs_fallocate;
 #endif
-    sfs_oper.flock = sfs_flock;
+//    sfs_oper.flock = sfs_flock;
 #ifdef HAVE_SETXATTR
-    sfs_oper.setxattr = sfs_setxattr;
-    sfs_oper.getxattr = sfs_getxattr;
-    sfs_oper.listxattr = sfs_listxattr;
-    sfs_oper.removexattr = sfs_removexattr;
+//    sfs_oper.setxattr = sfs_setxattr;
+//    sfs_oper.getxattr = sfs_getxattr;
+//    sfs_oper.listxattr = sfs_listxattr;
+//    sfs_oper.removexattr = sfs_removexattr;
 #endif
 }
 
