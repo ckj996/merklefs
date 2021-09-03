@@ -3,7 +3,9 @@ CXXFLAGS=-O3 -Wall -Wextra -std=c++17 -fdata-sections -ffunction-sections
 LDFLAGS=-Wl,--gc-sections
 LDLIBS=-I ../lib
 RM=rm -rf
-TARGETS=test_config test_path test_fs
+NAMES=config path metadata
+TARGETS=$(addprefix test_, $(NAMES))
+OBJECTS=$(addsuffix .o, $(NAMES))
 
 all:$(TARGETS)
 
@@ -13,7 +15,7 @@ all:$(TARGETS)
 %.o: ../lib/%.cc
 	$(CXX) $(CXXFLAGS) -c $^ $(LDLIBS) $(LDFLAGS)
 
-libmerkle.a: fs.o path.o config.o
+libmerkle.a: $(OBJECTS)
 	ar rcs $@ $^
 
 libs: libmerkle.a

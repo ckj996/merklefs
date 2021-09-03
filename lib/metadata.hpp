@@ -1,5 +1,5 @@
-#ifndef INCLUDE_MERKLEFS_
-#define INCLUDE_MERKLEFS_
+#ifndef INCLUDE_MERKLEFS_METADATA_
+#define INCLUDE_MERKLEFS_METADATA_
 
 #include <ctime>
 #include <string>
