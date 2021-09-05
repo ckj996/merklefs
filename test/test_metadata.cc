@@ -42,7 +42,7 @@ void test_creation()
 
 void test_load(const char *metadata)
 {
-    auto i = ifstream{metadata};
+    ifstream i {metadata};
     json j;
 
     i >> j;
@@ -51,8 +51,12 @@ void test_load(const char *metadata)
     auto usr = fs.lookup(1, "usr");
     auto bin = fs.lookup(usr, "bin");
     auto env = fs.lookup(bin, "env");
+    cout << "/usr/bin/env = /" << usr << "/" << bin << "/" << env << endl;
 
-    cout << usr << "/" << bin << "/" << env << endl;
+    cout << "listing /" << endl;
+    const auto& root = fs[1];
+    for (auto it = root.dirents().cbegin(); it != root.dirents().cend(); ++it)
+        cout << it->first << ":" << it->second << endl;
 }
 
 int main(int argc, char *argv[])
