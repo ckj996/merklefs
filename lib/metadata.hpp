@@ -3,7 +3,7 @@
 
 #include <ctime>
 #include <string>
-#include <unordered_map>
+#include <map>
 #include <variant>
 #include <vector>
 
@@ -37,7 +37,7 @@ class FileSystem {
     friend void from_json(const nlohmann::json& j, FileSystem& fs);
 };
 
-typedef std::unordered_map<std::string, ino_t> Dirents;
+typedef std::map<std::string, ino_t> Dirents;
 
 class Inode {
   public:
