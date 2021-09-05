@@ -1,26 +1,27 @@
 CXX=g++
 CXXFLAGS=-O3 -Wall -Wextra -std=c++17 -fdata-sections -ffunction-sections
 LDFLAGS=-Wl,--gc-sections
-LDLIBS=-I ../lib
 RM=rm -rf
-NAMES=config path metadata
-TARGETS=$(addprefix test_, $(NAMES))
-OBJECTS=$(addsuffix .o, $(NAMES))
+MAKE=make
+LIBPATH=../lib
+LIBNAME=merkle
+LDLIBS=-L$(LIBPATH) -l$(LIBNAME)
+SRCS=$(wildcard *.cc)
+OBJS=$(subst .cc,.o,$(SRCS))
+TARGETS=$(subst .cc,,$(SRCS))
 
-all:$(TARGETS)
+all: libs $(TARGETS)
 
-%: %.cc libmerkle.a
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDLIBS) $(LDFLAGS)
+%: %.o
+	$(CXX) -o $@ $^ $(LDLIBS) $(LDFLAGS)
 
-%.o: ../lib/%.cc ../lib/%.hpp
-	$(CXX) $(CXXFLAGS) -c $< $(LDLIBS) $(LDFLAGS)
+%.o: %.cc
+	$(CXX) $(CXXFLAGS) -c $<
 
-libmerkle.a: $(OBJECTS)
-	ar rcs $@ $^
+.PHONY: clean libs
 
-libs: libmerkle.a
-
-.PHONY: clean
+libs:
+	$(MAKE) -C $(LIBPATH)
 
 clean:
-	$(RM) $(TARGETS) *.o *.a
+	$(RM) $(TARGETS) *.o
