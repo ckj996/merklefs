@@ -1,35 +1,29 @@
 CC=gcc
 CXX=g++
 RM=rm -f
-CPPFLAGS=-O3 -Wall -Wextra $(shell pkg-config fuse3 --cflags)
-LDLIBS=$(shell pkg-config fuse3 --libs)
+MAKE=make
+CXXFLAGS=-O3 -Wall -Wextra -std=c++17 -fdata-sections -ffunction-sections $(shell pkg-config fuse3 --cflags)
+LDFLAGS=-Wl,--gc-sections
+LIBPATH=lib
+LIBNAME=merkle
+LDLIBS=$(shell pkg-config fuse3 --libs) -L$(LIBPATH) -l$(LIBNAME)
 
-SRCS=merklefs.cc
+SRCS=$(wildcard *.cc)
 OBJS=$(subst .cc,.o,$(SRCS))
-DESTDIR=/usr/local
+TARGETS=$(subst .cc,,$(SRCS))
 
-all: merklefs
+all: libs $(TARGETS)
 
-merklefs: $(OBJS)
-	$(CXX) -o merklefs $(OBJS) $(LDLIBS)
+%: %.o
+	$(CXX) -o $@ $^ $(LDLIBS) $(LDFLAGS)
 
-depend: .depend
+%.o: %.cc
+	$(CXX) $(CXXFLAGS) -c $<
 
-.depend: $(SRCS)
-	$(RM) ./.depend
-	$(CXX) $(CPPFLAGS) -MM $^>>./.depend;
+.PHONY: clean libs
 
-.PHONY: clean install uninstall
+libs:
+	$(MAKE) -C $(LIBPATH)
+
 clean:
-	$(RM) $(OBJS)
-
-install:
-	install merklefs $(DESTDIR)/bin
-
-uninstall:
-	rm -f $(DESTDIR)/bin/merklefs
-
-distclean: clean
-	$(RM) *~ .depend
-
-include .depend
+	$(RM) $(TARGETS) *.o

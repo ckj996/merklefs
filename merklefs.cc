@@ -63,8 +63,11 @@
 #include <fstream>
 #include <thread>
 #include <iomanip>
+#include "lib/metadata.hpp"
+#include "lib/config.hpp"
 
 using namespace std;
+using nlohmann::json;
 
 /* We are re-using pointers to our `struct sfs_inode` and `struct
    sfs_dirp` elements as inodes and file handles. This means that we
@@ -131,13 +134,23 @@ struct Fs {
     std::mutex mutex;
     InodeMap inodes; // protected by mutex
     Inode root;
+    metadata::FileSystem meta;
+    Config cfg;
     double timeout;
     bool debug;
     std::string source;
-    size_t blocksize;
+    size_t blksize = 4096;
     dev_t src_dev;
+    dev_t dev = 0;
+    uid_t uid = 1000;
+    gid_t gid = 1000;
+    timespec mnt_time = {};
     bool nosplice;
     bool nocache;
+    int lookup(fuse_ino_t parent, const char *name, fuse_entry_param& e);
+    int getattr(fuse_ino_t ino, struct stat& stat);
+    void readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
+            off_t offset, fuse_file_info *fi, bool plus);
 };
 static Fs fs{};
 
@@ -167,7 +180,7 @@ static int get_fs_fd(fuse_ino_t ino) {
 }
 
 
-static void sfs_init(void *userdata, fuse_conn_info *conn) {
+static void mfs_init(void *userdata, fuse_conn_info *conn) {
     (void)userdata;
     if (conn->capable & FUSE_CAP_EXPORT_SUPPORT)
         conn->want |= FUSE_CAP_EXPORT_SUPPORT;
@@ -185,6 +198,18 @@ static void sfs_init(void *userdata, fuse_conn_info *conn) {
         conn->want |= FUSE_CAP_SPLICE_WRITE;
     if (conn->capable & FUSE_CAP_SPLICE_READ && !fs.nosplice)
         conn->want |= FUSE_CAP_SPLICE_READ;
+}
+
+
+static void mfs_getattr(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
+    (void)fi;
+    struct stat attr;
+    auto err = fs.getattr(ino, attr);
+    if (err) {
+        fuse_reply_err(req, err);
+        return;
+    }
+    fuse_reply_attr(req, &attr, fs.timeout);
 }
 
 
@@ -363,19 +388,56 @@ static int do_lookup(fuse_ino_t parent, const char *name,
     return 0;
 }
 
+int Fs::getattr(fuse_ino_t ino, struct stat& attr)
+{
+    if (fs.debug)
+        cerr << "DEBUG: getattr(): ino=" << ino << endl;
 
-static void sfs_lookup(fuse_req_t req, fuse_ino_t parent, const char *name) {
+    if (ino == 0) {
+        return ENOENT;
+    }
+
+    const auto& inode = fs.meta[ino];
+    attr.st_dev = fs.dev;
+    attr.st_ino = ino;
+    attr.st_mode = inode.mode();
+    attr.st_nlink = 1;
+    attr.st_uid = fs.uid;
+    attr.st_gid = fs.gid;
+    attr.st_rdev = 0;
+    attr.st_size = inode.size();
+    attr.st_atim = fs.mnt_time;
+    attr.st_mtim = fs.mnt_time;
+    attr.st_ctim = fs.mnt_time;
+    attr.st_blksize = fs.blksize;
+    attr.st_blocks = inode.size() / 512 + bool(inode.size() % 512);
+    return 0;
+}
+
+
+int Fs::lookup(fuse_ino_t parent, const char *name, fuse_entry_param& e)
+{
+    if (fs.debug)
+        cerr << "DEBUG: lookup(): parent=" << parent
+             << ", name=" << name << endl;
+    memset(&e, 0, sizeof(e));
+    e.attr_timeout = fs.timeout;
+    e.entry_timeout = fs.timeout;
+    e.ino = fs.meta.lookup(parent, name);
+    e.generation = 0;
+    return getattr(e.ino, e.attr);
+}
+
+
+static void mfs_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
+{
     fuse_entry_param e {};
-    auto err = do_lookup(parent, name, &e);
+    auto err = fs.lookup(parent, name, e);
     if (err == ENOENT) {
         e.attr_timeout = fs.timeout;
         e.entry_timeout = fs.timeout;
         e.ino = e.attr.st_ino = 0;
         fuse_reply_entry(req, &e);
-    } else if (err) {
-        if (err == ENFILE || err == EMFILE)
-            cerr << "ERROR: Reached maximum number of file descriptors." << endl;
-        fuse_reply_err(req, err);
     } else {
         fuse_reply_entry(req, &e);
     }
@@ -591,6 +653,79 @@ static DirHandle *get_dir_handle(fuse_file_info *fi) {
 }
 
 
+struct DirH {
+    const metadata::Inode &inode;
+    metadata::Dirents::const_iterator it;
+    off_t offset;
+
+    DirH(const metadata::Inode& inode) : inode(inode), offset(0) {
+        it = inode.dirents().cbegin();
+    }
+
+    void seek(off_t off) {
+        if (off < offset) {
+            it = inode.dirents().cbegin();
+            offset = 0;
+        }
+        while (offset < off && next()) {
+        }
+    }
+
+    bool hasNext() {
+        return it != inode.dirents().cend();
+    }
+
+    bool get(const char **namep, ino_t *inop, off_t *offp) {
+        if (!hasNext()) {
+            return false;
+        }
+
+        *namep = it->first.c_str();
+        *inop = it->second;
+        *offp = offset + 1;
+        return true;
+    }
+
+    bool next() {
+        if (!hasNext()) {
+            return false;
+        }
+
+        ++it;
+        ++offset;
+        return true;
+    }
+
+};
+
+
+static DirH *get_dir_h(fuse_file_info *fi) {
+    return reinterpret_cast<DirH*>(fi->fh);
+}
+
+
+static void mfs_opendir(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
+    const auto& inode = fs.meta[ino];
+    if (!inode.is_dir()) {
+        fuse_reply_err(req, ENOTDIR);
+        return;
+    }
+
+    auto d = new (nothrow) DirH{inode};
+    if (d == nullptr) {
+        fuse_reply_err(req, ENOMEM);
+        return;
+    }
+
+    fi->fh = reinterpret_cast<uint64_t>(d);
+    if(fs.timeout) {
+        fi->keep_cache = 1;
+        fi->cache_readdir = 1;
+    }
+    fuse_reply_open(req, fi);
+}
+
+
 static void sfs_opendir(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
     Inode& inode = get_inode(ino);
     auto d = new (nothrow) DirHandle;
@@ -638,6 +773,92 @@ static bool is_dot_or_dotdot(const char *name) {
            (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'));
 }
 
+
+void Fs::readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
+        off_t offset, fuse_file_info *fi, bool plus)
+{
+    auto d = get_dir_h(fi);
+    auto rem = size;
+    char *p;
+    int err = 0, count = 0;
+
+    if (fs.debug)
+        cerr << "DEBUG: readdir(): started with ino "
+             << ino << " offset " << offset << endl;
+
+    auto buf = new (nothrow) char[size];
+    if (!buf) {
+        fuse_reply_err(req, ENOMEM);
+        return;
+    }
+    p = buf;
+    
+    if (offset != d->offset) {
+        if (fs.debug)
+            cerr << "DEBUG: readdir(): seeking to " << offset << endl;
+        d->seek(offset);
+    }
+
+    const char *d_name;
+    ino_t d_ino;
+    off_t d_off;
+    for (; d->get(&d_name, &d_ino, &d_off); d->next()) {
+        if (is_dot_or_dotdot(d_name))
+            continue;
+        
+        fuse_entry_param e {};
+        size_t entsize;
+        if (plus) {
+            err = fs.lookup(ino, d_name, e);
+            if (err)
+                goto error;
+            entsize = fuse_add_direntry_plus(req, p, rem, d_name, &e, d_off);
+        } else {
+            getattr(d_ino, e.attr);
+            entsize = fuse_add_direntry(req, p, rem, d_name, &e.attr, d_off);
+        }
+        if (entsize > rem) {
+            if (fs.debug)
+                cerr << "DEBUG: readdir(): buffer full, returning data. " << endl;
+            break;
+        }
+
+        p += entsize;
+        rem -= entsize;
+        count++;
+        if (fs.debug) {
+            cerr << "DEBUG: readdir(): added to buffer: " << d_name
+                 << ", ino " << e.attr.st_ino << ", offset " << d_off << endl;
+        }
+    }
+    err = 0;
+error:
+
+    // If there's an error, we can only signal it if we haven't stored
+    // any entries yet - otherwise we'd end up with wrong lookup
+    // counts for the entries that are already in the buffer. So we
+    // return what we've collected until that point.
+    if (err && rem == size) {
+        switch (err) {
+        case ENOENT:
+            cerr << "ERROR: readdir(): no such file or directory" << endl;
+            break;
+        case ENOTDIR:
+            cerr << "ERROR: readdir(): not a directory" << endl;
+            break;
+        default:
+            cerr << "ERROR: readdir(): error code " << err << endl;
+        }
+        fuse_reply_err(req, err);
+    } else {
+        if (fs.debug)
+            cerr << "DEBUG: readdir(): returning " << count
+                 << " entries, curr offset " << d->offset << endl;
+        fuse_reply_buf(req, buf, size - rem);
+    }
+    delete[] buf;
+    return;
+}
 
 static void do_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
                     off_t offset, fuse_file_info *fi, int plus) {
@@ -752,6 +973,25 @@ static void sfs_readdirplus(fuse_req_t req, fuse_ino_t ino, size_t size,
     do_readdir(req, ino, size, offset, fi, 1);
 }
 
+static void mfs_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
+                        off_t offset, fuse_file_info *fi) {
+    // operation logging is done in readdir to reduce code duplication
+    fs.readdir(req, ino, size, offset, fi, false);
+}
+
+
+static void mfs_readdirplus(fuse_req_t req, fuse_ino_t ino, size_t size,
+                            off_t offset, fuse_file_info *fi) {
+    // operation logging is done in readdir to reduce code duplication
+    fs.readdir(req, ino, size, offset, fi, true);
+}
+
+static void mfs_releasedir(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
+    (void) ino;
+    auto d = get_dir_h(fi);
+    delete d;
+    fuse_reply_err(req, 0);
+}
 
 static void sfs_releasedir(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
     (void) ino;
@@ -804,6 +1044,15 @@ static void sfs_fsyncdir(fuse_req_t req, fuse_ino_t ino, int datasync,
     fuse_reply_err(req, res == -1 ? errno : 0);
 }
 
+static void mfs_open(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
+    const auto& inode = fs.meta[ino];
+
+    string path = fs.cfg.pool() + inode.gethash();
+    auto fd = open(path.c_str(), fi->flags & ~O_NOFOLLOW);
+    fi->keep_cache = (fs.timeout != 0);
+    fi->fh = fd;
+    fuse_reply_open(req, fi);
+}
 
 static void sfs_open(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
     Inode& inode = get_inode(ino);
@@ -888,6 +1137,19 @@ static void sfs_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
                      fuse_file_info *fi) {
     (void) ino;
     do_read(req, size, off, fi);
+}
+
+
+static void mfs_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
+                     fuse_file_info *fi) {
+    (void) ino;
+    fuse_bufvec buf = FUSE_BUFVEC_INIT(size);
+    buf.buf[0].flags = static_cast<fuse_buf_flags>(
+        FUSE_BUF_IS_FD | FUSE_BUF_FD_SEEK);
+    buf.buf[0].fd = fi->fh;
+    buf.buf[0].pos = off;
+
+    fuse_reply_data(req, &buf, FUSE_BUF_COPY_FLAGS);
 }
 
 
@@ -1067,8 +1329,8 @@ static void sfs_removexattr(fuse_req_t req, fuse_ino_t ino, const char *name) {
 
 
 static void assign_operations(fuse_lowlevel_ops &sfs_oper) {
-    sfs_oper.init = sfs_init;
-    sfs_oper.lookup = sfs_lookup;
+    sfs_oper.init = mfs_init;
+    sfs_oper.lookup = mfs_lookup;
 //    sfs_oper.mkdir = sfs_mkdir;
 //    sfs_oper.mknod = sfs_mknod;
 //    sfs_oper.symlink = sfs_symlink;
@@ -1078,20 +1340,20 @@ static void assign_operations(fuse_lowlevel_ops &sfs_oper) {
 //    sfs_oper.rename = sfs_rename;
 //    sfs_oper.forget = sfs_forget;
 //    sfs_oper.forget_multi = sfs_forget_multi;
-    sfs_oper.getattr = sfs_getattr;
+    sfs_oper.getattr = mfs_getattr;
 //    sfs_oper.setattr = sfs_setattr;
 //    sfs_oper.readlink = sfs_readlink;
-    sfs_oper.opendir = sfs_opendir;
-    sfs_oper.readdir = sfs_readdir;
-//    sfs_oper.readdirplus = sfs_readdirplus;
-    sfs_oper.releasedir = sfs_releasedir;
+    sfs_oper.opendir = mfs_opendir;
+    sfs_oper.readdir = mfs_readdir;
+    sfs_oper.readdirplus = mfs_readdirplus;
+    sfs_oper.releasedir = mfs_releasedir;
 //    sfs_oper.fsyncdir = sfs_fsyncdir;
 //    sfs_oper.create = sfs_create;
-//    sfs_oper.open = sfs_open;
+    sfs_oper.open = mfs_open;
 //    sfs_oper.release = sfs_release;
 //    sfs_oper.flush = sfs_flush;
 //    sfs_oper.fsync = sfs_fsync;
-//    sfs_oper.read = sfs_read;
+    sfs_oper.read = mfs_read;
 //    sfs_oper.write_buf = sfs_write_buf;
 //    sfs_oper.statfs = sfs_statfs;
 #ifdef HAVE_POSIX_FALLOCATE
@@ -1108,7 +1370,7 @@ static void assign_operations(fuse_lowlevel_ops &sfs_oper) {
 
 static void print_usage(char *prog_name) {
     cout << "Usage: " << prog_name << " --help\n"
-         << "       " << prog_name << " [options] <source> <mountpoint>\n";
+         << "       " << prog_name << " [options] <metadata> <mountpoint>\n";
 }
 
 static cxxopts::ParseResult parse_wrapper(cxxopts::Options& parser, int& argc, char**& argv) {
@@ -1154,11 +1416,10 @@ static cxxopts::ParseResult parse_options(int argc, char **argv) {
 
     fs.debug = options.count("debug") != 0;
     fs.nosplice = options.count("nosplice") != 0;
-    char* resolved_path = realpath(argv[1], NULL);
-    if (resolved_path == NULL)
-        warn("WARNING: realpath() failed with");
-    fs.source = std::string {resolved_path};
-    free(resolved_path);
+    ifstream i {argv[1]};
+    json j;
+    i >> j;
+    fs.meta = j.get<metadata::FileSystem>();
 
     return options;
 }
@@ -1193,23 +1454,11 @@ int main(int argc, char *argv[]) {
     fs.root.nlookup = 9999;
     fs.timeout = options.count("nocache") ? 0 : 86400.0;
 
-    struct stat stat;
-    auto ret = lstat(fs.source.c_str(), &stat);
-    if (ret == -1)
-        err(1, "ERROR: failed to stat source (\"%s\")", fs.source.c_str());
-    if (!S_ISDIR(stat.st_mode))
-        errx(1, "ERROR: source is not a directory");
-    fs.src_dev = stat.st_dev;
-
-    fs.root.fd = open(fs.source.c_str(), O_PATH);
-    if (fs.root.fd == -1)
-        err(1, "ERROR: open(\"%s\", O_PATH)", fs.source.c_str());
-
     // Initialize fuse
     fuse_args args = FUSE_ARGS_INIT(0, nullptr);
     if (fuse_opt_add_arg(&args, argv[0]) ||
         fuse_opt_add_arg(&args, "-o") ||
-        fuse_opt_add_arg(&args, "default_permissions,fsname=hpps") ||
+        fuse_opt_add_arg(&args, "default_permissions,fsname=cafs") ||
         (options.count("debug-fuse") && fuse_opt_add_arg(&args, "-odebug")))
         errx(3, "ERROR: Out of memory");
 
@@ -1223,6 +1472,7 @@ int main(int argc, char *argv[]) {
             errx(3, "ERROR: Out of memory");
     }
 
+    int ret = 0;
     fuse_lowlevel_ops sfs_oper {};
     assign_operations(sfs_oper);
     auto se = fuse_session_new(&args, &sfs_oper, sizeof(sfs_oper), &fs);
