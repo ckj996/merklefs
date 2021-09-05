@@ -5,6 +5,7 @@
 #include "../lib/metadata.hpp"
 
 using namespace std;
+using namespace metadata;
 using nlohmann::json;
 
 void test_creation()

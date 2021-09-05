@@ -11,6 +11,8 @@
 
 #include "json.hpp"
 
+namespace metadata {
+
 class Inode;
 
 class FileSystem {
@@ -61,5 +63,7 @@ class Inode {
     friend void to_json(nlohmann::json& j, const Inode& fs);
     friend void from_json(const nlohmann::json& j, Inode& fs);
 };
+
+}
 
 #endif

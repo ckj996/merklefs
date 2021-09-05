@@ -9,6 +9,8 @@
 
 using namespace std;
 
+namespace metadata {
+
 FileSystem::FileSystem(ino_t root) : root_ino_(root), mnt_ts_(time(nullptr)) {
     mknod(S_IFDIR | 0755); // create root directory
 };
@@ -209,4 +211,6 @@ void from_json(const json& j, Inode& i)
         j.at("value").get_to(value);
         i.payload_ = value;
     }
+}
+
 }
