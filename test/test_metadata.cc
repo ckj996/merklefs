@@ -1,11 +1,13 @@
 #include <iostream>
+#include <fstream>
 #include <string>
 
 #include "../lib/metadata.hpp"
 
 using namespace std;
+using nlohmann::json;
 
-int main()
+void test_creation()
 {
     auto fs = FileSystem();
 
@@ -26,7 +28,7 @@ int main()
     cout << fs.lookup(1, "/bar/baz") << endl;
     cout << fs.lookup(1, "hi") << endl;
 
-    nlohmann::json j = fs;
+    json j = fs;
     cout << j << endl;
 
     auto tmp = j.get<FileSystem>();
@@ -35,5 +37,29 @@ int main()
     cout << tmp.lookup(1, "/bar/baz") << endl;
     cout << tmp.lookup(1, "hi") << endl;
 
+}
+
+void test_load(const char *metadata)
+{
+    auto i = ifstream{metadata};
+    json j;
+
+    i >> j;
+    auto fs = j.get<FileSystem>();
+
+    auto usr = fs.lookup(1, "usr");
+    auto bin = fs.lookup(usr, "bin");
+    auto env = fs.lookup(bin, "env");
+
+    cout << usr << "/" << bin << "/" << env << endl;
+}
+
+int main(int argc, char *argv[])
+{
+    if (argc == 1) {
+        test_creation();
+    } else {
+        test_load(argv[1]);
+    }
     return 0;
 }
