@@ -6,7 +6,7 @@
 
 using namespace std;
 
-static const string DEFAULT_CONFIG = "/etc/cafs/config.json";
+constexpr char DEFAULT_CONFIG[] = "/etc/cafs/config.json";
 
 Config::Config() : Config::Config(DEFAULT_CONFIG) {}
 
