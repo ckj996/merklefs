@@ -67,10 +67,11 @@
 #include "lib/config.hpp"
 
 using namespace std;
+using namespace metadata;
 using nlohmann::json;
 
 struct Fs {
-    metadata::FileSystem meta;
+    FileSystem meta;
     Config cfg;
     double timeout;
     bool debug;
@@ -202,11 +203,11 @@ static void mfs_readlink(fuse_req_t req, fuse_ino_t ino) {
 
 
 struct Dir {
-    const metadata::Inode &inode;
-    metadata::Dirents::const_iterator it;
+    const Inode &inode;
+    Dirents::const_iterator it;
     off_t offset;
 
-    Dir(const metadata::Inode& inode) : inode(inode), offset(0) {
+    Dir(const Inode& inode) : inode(inode), offset(0) {
         it = inode.dirents().cbegin();
     }
 
@@ -568,7 +569,7 @@ static cxxopts::ParseResult parse_options(int argc, char **argv) {
     ifstream i {argv[1]};
     json j;
     i >> j;
-    fs.meta = j.get<metadata::FileSystem>();
+    fs.meta = j.get<FileSystem>();
 
     return options;
 }
