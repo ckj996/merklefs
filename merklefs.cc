@@ -69,52 +69,7 @@
 using namespace std;
 using nlohmann::json;
 
-/* We are re-using pointers to our `struct sfs_inode` and `struct
-   sfs_dirp` elements as inodes and file handles. This means that we
-   must be able to store pointer a pointer in both a fuse_ino_t
-   variable and a uint64_t variable (used for file handles). */
-static_assert(sizeof(fuse_ino_t) >= sizeof(void*),
-              "void* must fit into fuse_ino_t");
-static_assert(sizeof(fuse_ino_t) >= sizeof(uint64_t),
-              "fuse_ino_t must be at least 64 bits");
-
-
-/* Forward declarations */
-struct Inode;
-static Inode& get_inode(fuse_ino_t ino);
-
-
-// Maps files in the source directory tree to inodes
-typedef std::unordered_map<fuse_ino_t, Inode> InodeMap;
-
-struct Inode {
-    int fd {-1};
-    dev_t src_dev {0};
-    ino_t src_ino {0};
-    int generation {0};
-    uint64_t nopen {0};
-    uint64_t nlookup {0};
-    std::mutex m;
-
-    // Delete copy constructor and assignments. We could implement
-    // move if we need it.
-    Inode() = default;
-    Inode(const Inode&) = delete;
-    Inode(Inode&& inode) = delete;
-    Inode& operator=(Inode&& inode) = delete;
-    Inode& operator=(const Inode&) = delete;
-
-    ~Inode() {
-        if(fd > 0)
-            close(fd);
-    }
-};
-
 struct Fs {
-    // Must be acquired *after* any Inode.m locks.
-    std::mutex mutex;
-    InodeMap inodes; // protected by mutex
-    Inode root;
     metadata::FileSystem meta;
     Config cfg;
     double timeout;
@@ -180,25 +135,6 @@ int Fs::lookup(fuse_ino_t parent, const char *name, fuse_entry_param& e)
         (fs.nosplice ?                           \
             FUSE_BUF_NO_SPLICE :                 \
             static_cast<fuse_buf_copy_flags>(0))
-
-
-static Inode& get_inode(fuse_ino_t ino) {
-    if (ino == FUSE_ROOT_ID)
-        return fs.root;
-
-    Inode* inode = reinterpret_cast<Inode*>(ino);
-    if(inode->fd == -1) {
-        cerr << "INTERNAL ERROR: Unknown inode " << ino << endl;
-        abort();
-    }
-    return *inode;
-}
-
-
-static int get_fs_fd(fuse_ino_t ino) {
-    int fd = get_inode(ino).fd;
-    return fd;
-}
 
 
 static void mfs_init(void *userdata, fuse_conn_info *conn) {
@@ -520,6 +456,7 @@ static void mfs_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
 }
 
 
+/*
 static void sfs_statfs(fuse_req_t req, fuse_ino_t ino) {
     struct statvfs stbuf;
 
@@ -537,6 +474,7 @@ static void sfs_flock(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi,
     auto res = flock(fi->fh, op);
     fuse_reply_err(req, res == -1 ? errno : 0);
 }
+*/
 
 
 static void assign_operations(fuse_lowlevel_ops &sfs_oper) {
@@ -660,9 +598,6 @@ int main(int argc, char *argv[]) {
     // so try to get rid of any resource softlimit.
     maximize_fd_limit();
 
-    // Initialize filesystem root
-    fs.root.fd = -1;
-    fs.root.nlookup = 9999;
     fs.timeout = options.count("nocache") ? 0 : 86400.0;
 
     // Initialize fuse
