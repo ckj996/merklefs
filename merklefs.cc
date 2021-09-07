@@ -488,6 +488,7 @@ static void mfs_open(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
         // TODO: lazy load object
         auto err = errno;
         fuse_reply_err(req, err);
+        return;
     }
     fi->keep_cache = (fs.timeout != 0);
     fi->fh = fd;
