@@ -70,8 +70,31 @@ using namespace std;
 using namespace metadata;
 using nlohmann::json;
 
+struct File {
+    int fd {-1};
+    int nopen {0};
+
+    std::mutex m;
+
+    // Delete copy constructor and assignments. We could implement
+    // move if we need it.
+    File() = default;
+    File(const File&) = delete;
+    File(File&& inode) = delete;
+    File& operator=(File&& inode) = delete;
+    File& operator=(const File&) = delete;
+
+    ~File() {
+        if(fd >= 0)
+            close(fd);
+    }
+};
+
+typedef unordered_map<fuse_ino_t, File> FileMap;
+
 struct Fs {
     FileSystem meta;
+    FileMap fmap;
     Config cfg;
     double timeout;
     bool debug;
@@ -419,6 +442,17 @@ static void mfs_open(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
     if (fs.timeout && fi->flags & O_APPEND)
         fi->flags &= ~O_APPEND;
 
+    auto& f = fs.fmap[ino];
+
+    lock_guard<mutex> g {f.m};
+    if (f.fd >= 0) {
+        f.nopen++;
+        fi->keep_cache = (fs.timeout != 0);
+        fi->fh = f.fd;
+        fuse_reply_open(req, fi);
+        return;
+    }
+
     string path = fs.cfg.pool() + "/" + inode.gethash();
     auto fd = open(path.c_str(), fi->flags & ~O_NOFOLLOW);
     if (fd == -1) {
@@ -427,6 +461,8 @@ static void mfs_open(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
         fuse_reply_err(req, err);
         return;
     }
+    f.fd = fd;
+    f.nopen = 1;
     fi->keep_cache = (fs.timeout != 0);
     fi->fh = fd;
     fuse_reply_open(req, fi);
@@ -437,7 +473,16 @@ static void mfs_release(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
     if (fs.debug)
         cerr << "DEBUG: " << __func__ << "(): ino=" << ino << endl;
 
-    close(fi->fh);
+    auto& f = fs.fmap[ino];
+
+    lock_guard<mutex> g {f.m};
+    if (f.nopen <= 0 || f.fd != static_cast<int>(fi->fh)) {
+        fuse_reply_err(req, EBADF);
+    }
+
+    if (!--f.nopen) {
+        fs.fmap.erase(ino);
+    }
     fuse_reply_err(req, 0);
 }
 
