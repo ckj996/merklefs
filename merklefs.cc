@@ -128,12 +128,52 @@ struct Fs {
     timespec mnt_time = {};
     bool nosplice;
     bool nocache;
-    int lookup(fuse_ino_t parent, const char *name, fuse_entry_param& e);
     int getattr(fuse_ino_t ino, struct stat& stat);
-    void readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
-            off_t offset, fuse_file_info *fi, bool plus);
+    int lookup(fuse_ino_t parent, const char *name, fuse_entry_param& e);
 };
 static Fs fs{};
+
+
+int Fs::getattr(fuse_ino_t ino, struct stat& attr)
+{
+    if (debug)
+        cerr << "DEBUG: getattr(): ino=" << ino << endl;
+
+    if (ino == 0) {
+        return ENOENT;
+    }
+
+    const auto& inode = meta[ino];
+    attr.st_dev = dev;
+    attr.st_ino = ino;
+    attr.st_mode = inode.mode();
+    attr.st_nlink = 1;
+    attr.st_uid = uid;
+    attr.st_gid = gid;
+    attr.st_rdev = 0;
+    attr.st_size = inode.size();
+    attr.st_atim = mnt_time;
+    attr.st_mtim = mnt_time;
+    attr.st_ctim = mnt_time;
+    attr.st_blksize = blksize;
+    attr.st_blocks = inode.size() / 512 + bool(inode.size() % 512);
+    return 0;
+}
+
+
+int Fs::lookup(fuse_ino_t parent, const char *name, fuse_entry_param& e)
+{
+    if (debug)
+        cerr << "DEBUG: lookup(): parent=" << parent
+             << ", name=" << name << endl;
+
+    memset(&e, 0, sizeof(e));
+    e.attr_timeout = timeout;
+    e.entry_timeout = timeout;
+    e.ino = meta.lookup(parent, name);
+    e.generation = 0;
+    return getattr(e.ino, e.attr);
+}
 
 
 #define FUSE_BUF_COPY_FLAGS                      \
@@ -194,47 +234,6 @@ static void mfs_getattr(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
         return;
     }
     fuse_reply_attr(req, &attr, fs.timeout);
-}
-
-
-int Fs::getattr(fuse_ino_t ino, struct stat& attr)
-{
-    if (fs.debug)
-        cerr << "DEBUG: getattr(): ino=" << ino << endl;
-
-    if (ino == 0) {
-        return ENOENT;
-    }
-
-    const auto& inode = fs.meta[ino];
-    attr.st_dev = fs.dev;
-    attr.st_ino = ino;
-    attr.st_mode = inode.mode();
-    attr.st_nlink = 1;
-    attr.st_uid = fs.uid;
-    attr.st_gid = fs.gid;
-    attr.st_rdev = 0;
-    attr.st_size = inode.size();
-    attr.st_atim = fs.mnt_time;
-    attr.st_mtim = fs.mnt_time;
-    attr.st_ctim = fs.mnt_time;
-    attr.st_blksize = fs.blksize;
-    attr.st_blocks = inode.size() / 512 + bool(inode.size() % 512);
-    return 0;
-}
-
-
-int Fs::lookup(fuse_ino_t parent, const char *name, fuse_entry_param& e)
-{
-    if (fs.debug)
-        cerr << "DEBUG: lookup(): parent=" << parent
-             << ", name=" << name << endl;
-    memset(&e, 0, sizeof(e));
-    e.attr_timeout = fs.timeout;
-    e.entry_timeout = fs.timeout;
-    e.ino = fs.meta.lookup(parent, name);
-    e.generation = 0;
-    return getattr(e.ino, e.attr);
 }
 
 
@@ -348,7 +347,7 @@ static bool is_dot_or_dotdot(const char *name) {
 }
 
 
-void Fs::readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
+void do_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
         off_t offset, fuse_file_info *fi, bool plus)
 {
     auto d = get_dir(fi);
@@ -388,7 +387,9 @@ void Fs::readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
                 goto error;
             entsize = fuse_add_direntry_plus(req, p, rem, d_name, &e, d_off);
         } else {
-            getattr(d_ino, e.attr);
+            err = fs.getattr(d_ino, e.attr);
+            if (err)
+                goto error;
             entsize = fuse_add_direntry(req, p, rem, d_name, &e.attr, d_off);
         }
         if (entsize > rem) {
@@ -438,14 +439,14 @@ error:
 static void mfs_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
                         off_t offset, fuse_file_info *fi) {
     // operation logging is done in readdir to reduce code duplication
-    fs.readdir(req, ino, size, offset, fi, false);
+    do_readdir(req, ino, size, offset, fi, false);
 }
 
 
 static void mfs_readdirplus(fuse_req_t req, fuse_ino_t ino, size_t size,
                             off_t offset, fuse_file_info *fi) {
     // operation logging is done in readdir to reduce code duplication
-    fs.readdir(req, ino, size, offset, fi, true);
+    do_readdir(req, ino, size, offset, fi, true);
 }
 
 
