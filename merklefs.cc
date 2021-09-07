@@ -202,6 +202,9 @@ static void mfs_init(void *userdata, fuse_conn_info *conn) {
 
 
 static void mfs_getattr(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
+    if (fs.debug)
+        cerr << "DEBUG: " << __func__ << "(): ino=" << ino << endl;
+
     (void)fi;
     struct stat attr;
     auto err = fs.getattr(ino, attr);
@@ -431,6 +434,10 @@ int Fs::lookup(fuse_ino_t parent, const char *name, fuse_entry_param& e)
 
 static void mfs_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
+    if (fs.debug)
+        cerr << "DEBUG: " << __func__ << "(): parent=" << parent
+             << ", name=" << name << endl;
+
     fuse_entry_param e {};
     auto err = fs.lookup(parent, name, e);
     if (err == ENOENT) {
@@ -618,6 +625,14 @@ static void sfs_forget_multi(fuse_req_t req, size_t count,
 }
 
 
+static void mfs_readlink(fuse_req_t req, fuse_ino_t ino) {
+    if (fs.debug)
+        cerr << "DEBUG: " << __func__ << "(): ino=" << ino << endl;
+
+    const auto& inode = fs.meta[ino];
+    fuse_reply_readlink(req, inode.readlink().c_str());
+}
+
 static void sfs_readlink(fuse_req_t req, fuse_ino_t ino) {
     Inode& inode = get_inode(ino);
     char buf[PATH_MAX + 1];
@@ -653,12 +668,12 @@ static DirHandle *get_dir_handle(fuse_file_info *fi) {
 }
 
 
-struct DirH {
+struct Dir {
     const metadata::Inode &inode;
     metadata::Dirents::const_iterator it;
     off_t offset;
 
-    DirH(const metadata::Inode& inode) : inode(inode), offset(0) {
+    Dir(const metadata::Inode& inode) : inode(inode), offset(0) {
         it = inode.dirents().cbegin();
     }
 
@@ -699,19 +714,22 @@ struct DirH {
 };
 
 
-static DirH *get_dir_h(fuse_file_info *fi) {
-    return reinterpret_cast<DirH*>(fi->fh);
+static Dir *get_dir(fuse_file_info *fi) {
+    return reinterpret_cast<Dir*>(fi->fh);
 }
 
 
 static void mfs_opendir(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
+    if (fs.debug)
+        cerr << "DEBUG: " << __func__ << "(): ino=" << ino << endl;
+
     const auto& inode = fs.meta[ino];
     if (!inode.is_dir()) {
         fuse_reply_err(req, ENOTDIR);
         return;
     }
 
-    auto d = new (nothrow) DirH{inode};
+    auto d = new (nothrow) Dir{inode};
     if (d == nullptr) {
         fuse_reply_err(req, ENOMEM);
         return;
@@ -777,7 +795,7 @@ static bool is_dot_or_dotdot(const char *name) {
 void Fs::readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
         off_t offset, fuse_file_info *fi, bool plus)
 {
-    auto d = get_dir_h(fi);
+    auto d = get_dir(fi);
     auto rem = size;
     char *p;
     int err = 0, count = 0;
@@ -987,8 +1005,10 @@ static void mfs_readdirplus(fuse_req_t req, fuse_ino_t ino, size_t size,
 }
 
 static void mfs_releasedir(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
-    (void) ino;
-    auto d = get_dir_h(fi);
+    if (fs.debug)
+        cerr << "DEBUG: " << __func__ << "(): ino=" << ino << endl;
+
+    auto d = get_dir(fi);
     delete d;
     fuse_reply_err(req, 0);
 }
@@ -1045,10 +1065,34 @@ static void sfs_fsyncdir(fuse_req_t req, fuse_ino_t ino, int datasync,
 }
 
 static void mfs_open(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
+    if (fs.debug)
+        cerr << "DEBUG: " << __func__ << "(): ino=" << ino << endl;
+
     const auto& inode = fs.meta[ino];
 
-    string path = fs.cfg.pool() + inode.gethash();
+    /* With writeback cache, kernel may send read requests even
+       when userspace opened write-only */
+    if (fs.timeout && (fi->flags & O_ACCMODE) == O_WRONLY) {
+        fi->flags &= ~O_ACCMODE;
+        fi->flags |= O_RDWR;
+    }
+
+    /* With writeback cache, O_APPEND is handled by the kernel.  This
+       breaks atomicity (since the file may change in the underlying
+       filesystem, so that the kernel's idea of the end of the file
+       isn't accurate anymore). However, no process should modify the
+       file in the underlying filesystem once it has been read, so
+       this is not a problem. */
+    if (fs.timeout && fi->flags & O_APPEND)
+        fi->flags &= ~O_APPEND;
+
+    string path = fs.cfg.pool() + "/" + inode.gethash();
     auto fd = open(path.c_str(), fi->flags & ~O_NOFOLLOW);
+    if (fd == -1) {
+        // TODO: lazy load object
+        auto err = errno;
+        fuse_reply_err(req, err);
+    }
     fi->keep_cache = (fs.timeout != 0);
     fi->fh = fd;
     fuse_reply_open(req, fi);
@@ -1091,6 +1135,15 @@ static void sfs_open(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
     fi->keep_cache = (fs.timeout != 0);
     fi->fh = fd;
     fuse_reply_open(req, fi);
+}
+
+
+static void mfs_release(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
+    if (fs.debug)
+        cerr << "DEBUG: " << __func__ << "(): ino=" << ino << endl;
+
+    close(fi->fh);
+    fuse_reply_err(req, 0);
 }
 
 
@@ -1142,7 +1195,9 @@ static void sfs_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
 
 static void mfs_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
                      fuse_file_info *fi) {
-    (void) ino;
+    if (fs.debug)
+        cerr << "DEBUG: " << __func__ << "(): ino=" << ino << endl;
+
     fuse_bufvec buf = FUSE_BUFVEC_INIT(size);
     buf.buf[0].flags = static_cast<fuse_buf_flags>(
         FUSE_BUF_IS_FD | FUSE_BUF_FD_SEEK);
@@ -1342,7 +1397,7 @@ static void assign_operations(fuse_lowlevel_ops &sfs_oper) {
 //    sfs_oper.forget_multi = sfs_forget_multi;
     sfs_oper.getattr = mfs_getattr;
 //    sfs_oper.setattr = sfs_setattr;
-//    sfs_oper.readlink = sfs_readlink;
+    sfs_oper.readlink = mfs_readlink;
     sfs_oper.opendir = mfs_opendir;
     sfs_oper.readdir = mfs_readdir;
     sfs_oper.readdirplus = mfs_readdirplus;
@@ -1350,7 +1405,7 @@ static void assign_operations(fuse_lowlevel_ops &sfs_oper) {
 //    sfs_oper.fsyncdir = sfs_fsyncdir;
 //    sfs_oper.create = sfs_create;
     sfs_oper.open = mfs_open;
-//    sfs_oper.release = sfs_release;
+    sfs_oper.release = mfs_release;
 //    sfs_oper.flush = sfs_flush;
 //    sfs_oper.fsync = sfs_fsync;
     sfs_oper.read = mfs_read;
