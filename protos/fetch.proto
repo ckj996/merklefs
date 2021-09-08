@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+service FetchService {
+    rpc Fetch (FetchRequest) returns (FetchReply) {}
+}
+
+message FetchRequest {
+    string key = 1;
+}
+
+message FetchReply {
+    bool ok = 1;
+}
