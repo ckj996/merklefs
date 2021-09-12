@@ -1,26 +1,30 @@
+MAKE=make
+RM=rm -rf
 CXX=g++
 CXXFLAGS=-O3 -Wall -Wextra -std=c++17 -fdata-sections -ffunction-sections
-LDFLAGS=-Wl,--gc-sections
-RM=rm -rf
-MAKE=make
 LIBPATH=../lib
 LIBNAME=merkle
-LDLIBS=-L$(LIBPATH) -l$(LIBNAME)
-SRCS=$(wildcard *.cc)
+LDFLAGS=-L$(LIBPATH) -l$(LIBNAME)\
+		$(shell pkg-config --libs protobuf grpc++)\
+		-pthread\
+		-Wl,--no-as-needed -lgrpc++_reflection -Wl,--as-needed\
+		-Wl,--gc-sections\
+		-ldl
+SRCS=$(wildcard test_*.cc)
 OBJS=$(subst .cc,.o,$(SRCS))
 TARGETS=$(subst .cc,,$(SRCS))
 
-all: libs $(TARGETS)
+all: depend $(TARGETS)
 
-%: %.o
-	$(CXX) -o $@ $^ $(LDLIBS) $(LDFLAGS)
+test_%: test_%.o
+	$(CXX) -o $@ $^ $(LDFLAGS)
 
 %.o: %.cc
-	$(CXX) $(CXXFLAGS) -c $<
+	$(CXX) -c $< $(CXXFLAGS)
 
-.PHONY: clean libs
+.PHONY: clean depend
 
-libs:
+depend:
 	$(MAKE) -C $(LIBPATH)
 
 clean:

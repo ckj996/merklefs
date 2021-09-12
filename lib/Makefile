@@ -1,17 +1,18 @@
+MAKE=make
+RM=rm -rf
 CXX=g++
 CPPFLAGS=$(pkg-config --cflags protobuf grpc++)
 CXXFLAGS=-O3 -Wall -Wextra -std=c++17 -fdata-sections -ffunction-sections
-RM=rm -rf
-OBJS=$(subst .cc,.o,$(wildcard *.cc))
+OBJS := $(subst .cc,.o,$(wildcard *.cc))
 TARGET=libmerkle.a
 
-PROTOS=fetch
+PROTOS=object
 PROTOC=protoc
 GRPC_CPP_PLUGIN_PATH=$(shell which grpc_cpp_plugin)
 PROTOS_PATH=../protos
 vpath %.proto $(PROTOS_PATH)
 
-all: $(TARGET)
+all: depend
 
 %.a: $(OBJS)
 	ar rcs $@ $^
@@ -29,7 +30,8 @@ all: $(TARGET)
 
 .PHONY: proto clean all
 
-proto: $(PROTOS).pb.cc $(PROTOS).grpc.pb.cc
+depend: $(PROTOS).pb.cc $(PROTOS).grpc.pb.cc
+	$(MAKE) $(TARGET)
 
 clean:
 	$(RM) *.a *.o *.pb.*
