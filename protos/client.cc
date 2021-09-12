@@ -25,17 +25,14 @@ using namespace std;
 
 int main(int argc, char **argv)
 {
-    // Instantiate the client. It requires a channel, out of which the actual RPCs
-    // are created. This channel models a connection to an endpoint specified by
-    // the argument "--target=" which is the only expected argument.
-    // We indicate that the channel isn't authenticated (use of
-    // InsecureChannelCredentials()).
     string url = "unix:///tmp/object-fetcher.sock";
     string key = "hello";
+
     if (argc > 1)
     {
         key = argv[1];
     }
+
     Fetcher fetcher(url);
     bool reply = fetcher.fetch(key);
     cout << "Fetcher received: " << (reply ? "OK" : "BAD") << endl;

@@ -24,18 +24,18 @@
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
 
-#include "fetch.grpc.pb.h"
+#include "object.grpc.pb.h"
 
-using fetch::FetchReply;
-using fetch::FetchRequest;
-using fetch::FetchService;
+using object::FetchReply;
+using object::FetchRequest;
+using object::Fetcher;
 using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
 
 // Logic and data behind the server's behavior.
-class FetchServiceImpl final : public FetchService::Service
+class FetcherImpl final : public Fetcher::Service
 {
     Status Fetch(ServerContext *context, const FetchRequest *request,
                  FetchReply *reply) override
@@ -49,7 +49,7 @@ void RunServer()
 {
     //std::string server_address("0.0.0.0:50051");
     std::string server_address("unix:///tmp/object-fetcher.sock");
-    FetchServiceImpl service;
+    FetcherImpl service;
 
     grpc::EnableDefaultHealthCheckService(true);
     grpc::reflection::InitProtoReflectionServerBuilderPlugin();

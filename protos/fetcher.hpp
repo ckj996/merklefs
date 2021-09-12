@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-#include "fetch.grpc.pb.h"
+#include "object.grpc.pb.h"
 
 class Fetcher {
   public:
@@ -13,7 +13,7 @@ class Fetcher {
     bool fetch(const std::string& key);
 
   private:
-    std::unique_ptr<fetch::FetchService::Stub> stub_;
+    std::unique_ptr<object::Fetcher::Stub> stub_;
 };
 
 #endif

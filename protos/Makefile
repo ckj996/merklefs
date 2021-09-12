@@ -40,10 +40,10 @@ vpath %.proto $(PROTOS_PATH)
 
 all: system-check client server
 
-client: fetch.pb.o fetch.grpc.pb.o fetcher.o client.o
+client: object.pb.o object.grpc.pb.o fetcher.o client.o
 	$(CXX) $^ $(LDFLAGS) -o $@
 
-server: fetch.pb.o fetch.grpc.pb.o server.o
+server: object.pb.o object.grpc.pb.o server.o
 	$(CXX) $^ $(LDFLAGS) -o $@
 
 .PRECIOUS: %.grpc.pb.cc

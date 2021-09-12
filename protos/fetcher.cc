@@ -18,39 +18,31 @@
 
 #include "fetcher.hpp"
 
-#include <iostream>
-#include <memory>
 #include <string>
 
 #include <grpcpp/grpcpp.h>
 
-#include "fetch.grpc.pb.h"
-
-using fetch::FetchReply;
-using fetch::FetchRequest;
-using fetch::FetchService;
-using namespace grpc;
-
 Fetcher::Fetcher(const std::string& url) {
-    const auto& channel = CreateChannel(url, InsecureChannelCredentials());
-    stub_ = FetchService::NewStub(channel);
+    stub_ = object::Fetcher::NewStub(
+        grpc::CreateChannel(url, grpc::InsecureChannelCredentials())
+    );
 }
 
 bool Fetcher::fetch(const std::string &key)
 {
     // Data we are sending to the server.
-    FetchRequest request;
+    object::FetchRequest request;
     request.set_key(key);
 
     // Container for the data we expect from the server.
-    FetchReply reply;
+    object::FetchReply reply;
 
     // Context for the client. It could be used to convey extra information to
     // the server and/or tweak certain RPC behaviors.
-    ClientContext context;
+    grpc::ClientContext context;
 
     // The actual RPC.
-    Status status = stub_->Fetch(&context, request, &reply);
+    grpc::Status status = stub_->Fetch(&context, request, &reply);
 
     // Act upon its status.
     return status.ok() && reply.ok();
