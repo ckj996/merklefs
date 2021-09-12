@@ -38,7 +38,7 @@ PROTOS_PATH = .
 
 vpath %.proto $(PROTOS_PATH)
 
-all: system-check client server
+all: system-check client server object_pb2.py object_pb2_grpc.py
 
 client: object.pb.o object.grpc.pb.o fetcher.o client.o
 	$(CXX) $^ $(LDFLAGS) -o $@
@@ -54,8 +54,16 @@ server: object.pb.o object.grpc.pb.o server.o
 %.pb.cc: %.proto
 	$(PROTOC) -I $(PROTOS_PATH) --cpp_out=. $<
 
+.PRECIOUT: %_pb2.py
+%_pb2.py: %.proto
+	python3 -m grpc_tools.protoc -I $(PROTOS_PATH) --python_out=. $<
+
+.PRECIOUT: %_pb2_grpc.py
+%_pb2_grpc.py: %.proto
+	python3 -m grpc_tools.protoc -I $(PROTOS_PATH) --grpc_python_out=. $<
+
 clean:
-	rm -f *.o *.pb.cc *.pb.h client server
+	rm -f *.o *.pb.cc *.pb.h client server *_pb2*.py
 
 
 # The following is to test your system and ensure a smoother experience.

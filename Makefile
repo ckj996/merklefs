@@ -13,7 +13,9 @@ LDFLAGS=-L$(LIBPATH) -l$(LIBNAME)\
 		-Wl,--gc-sections\
 		-ldl
 
-all: libs merklefs
+TARGETS=merklefs
+
+all: libs $(TARGETS)
 
 merklefs: merklefs.o
 	$(CXX) -o $@ $^ $(LDLIBS) $(LDFLAGS)
