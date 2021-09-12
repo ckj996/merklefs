@@ -3,18 +3,19 @@ CXX=g++
 RM=rm -f
 MAKE=make
 CXXFLAGS=-O3 -Wall -Wextra -std=c++17 -fdata-sections -ffunction-sections $(shell pkg-config fuse3 --cflags)
-LDFLAGS=-Wl,--gc-sections
 LIBPATH=lib
 LIBNAME=merkle
-LDLIBS=$(shell pkg-config fuse3 --libs) -L$(LIBPATH) -l$(LIBNAME)
+LDFLAGS=-L$(LIBPATH) -l$(LIBNAME)\
+		$(shell pkg-config fuse3 --libs)\
+		$(shell pkg-config --libs protobuf grpc++)\
+		-pthread\
+		-Wl,--no-as-needed -lgrpc++_reflection -Wl,--as-needed\
+		-Wl,--gc-sections\
+		-ldl
 
-SRCS=$(wildcard *.cc)
-OBJS=$(subst .cc,.o,$(SRCS))
-TARGETS=$(subst .cc,,$(SRCS))
+all: libs merklefs
 
-all: libs $(TARGETS)
-
-%: %.o
+merklefs: merklefs.o
 	$(CXX) -o $@ $^ $(LDLIBS) $(LDFLAGS)
 
 %.o: %.cc

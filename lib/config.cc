@@ -6,7 +6,7 @@
 
 using namespace std;
 
-constexpr char DEFAULT_CONFIG[] = "/etc/cafs/config.json";
+constexpr char DEFAULT_CONFIG[] = "/etc/merklefs/config.json";
 
 Config::Config() : Config::Config(DEFAULT_CONFIG) {}
 
@@ -16,9 +16,11 @@ Config::Config(const string& path) {
     i >> j;
     pool_ = j["pool"];
     remote_ = j["remote"];
+    fetcher_ = j["fetcher"];
 }
 
 Config::~Config() {}
 
-string& Config::pool() { return pool_; }
-string& Config::remote() { return remote_; }
+const string& Config::pool() { return pool_; }
+const string& Config::remote() { return remote_; }
+const string& Config::fetcher() { return fetcher_; }

@@ -65,6 +65,7 @@
 #include <iomanip>
 #include "lib/metadata.hpp"
 #include "lib/config.hpp"
+#include "lib/fetcher.hpp"
 
 using namespace std;
 using namespace metadata;
@@ -93,9 +94,11 @@ struct File {
 typedef unordered_map<fuse_ino_t, File> FileMap;
 
 struct Fs {
+    Fs() : fetcher(Fetcher{cfg.fetcher()}) {};
     FileSystem meta;
     FileMap fmap;
     Config cfg;
+    Fetcher fetcher;
     double timeout;
     bool debug;
     std::string source;
@@ -455,8 +458,11 @@ static void mfs_open(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
 
     string path = fs.cfg.pool() + "/" + inode.gethash();
     auto fd = open(path.c_str(), fi->flags & ~O_NOFOLLOW);
+    if (fd == -1 && fs.fetcher.fetch(inode.gethash())) {
+        // load the object and retry open
+        fd = open(path.c_str(), fi->flags & ~O_NOFOLLOW);
+    }
     if (fd == -1) {
-        // TODO: lazy load object
         auto err = errno;
         fuse_reply_err(req, err);
         return;
@@ -650,7 +656,7 @@ int main(int argc, char *argv[]) {
     fuse_args args = FUSE_ARGS_INIT(0, nullptr);
     if (fuse_opt_add_arg(&args, argv[0]) ||
         fuse_opt_add_arg(&args, "-o") ||
-        fuse_opt_add_arg(&args, "default_permissions,fsname=cafs") ||
+        fuse_opt_add_arg(&args, "default_permissions,fsname=merklefs") ||
         (options.count("debug-fuse") && fuse_opt_add_arg(&args, "-odebug")))
         errx(3, "ERROR: Out of memory");
 

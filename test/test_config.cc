@@ -17,7 +17,8 @@ int main(int argc, char *argv[])
     }
     
     cout << "pool: " << cfg.pool() << endl
-        << "remote: " << cfg.remote() << endl;
+        << "remote: " << cfg.remote() << endl
+        << "fetcher: " << cfg.fetcher() << endl;
 
     return 0;
 }

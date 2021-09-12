@@ -40,7 +40,8 @@ class FetcherImpl final : public Fetcher::Service
     Status Fetch(ServerContext *context, const FetchRequest *request,
                  FetchReply *reply) override
     {
-        reply->set_ok(request->key() == "hello");
+        std::cout << "fetch " << request->key() << std::endl;
+        reply->set_ok(false);
         return Status::OK;
     }
 };
