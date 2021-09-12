@@ -39,11 +39,11 @@ class Fetcher
 
     // Assembles the client's payload, sends it and presents the response back
     // from the server.
-    bool Fetch(const std::string &user)
+    bool Fetch(const std::string &key)
     {
         // Data we are sending to the server.
         FetchRequest request;
-        request.set_key(user);
+        request.set_key(key);
 
         // Container for the data we expect from the server.
         FetchReply reply;
@@ -56,16 +56,7 @@ class Fetcher
         Status status = stub_->Fetch(&context, request, &reply);
 
         // Act upon its status.
-        if (status.ok())
-        {
-            return reply.ok();
-        }
-        else
-        {
-            std::cout << status.error_code() << ": " << status.error_message()
-                      << std::endl;
-            return "RPC failed";
-        }
+        return status.ok() && reply.ok();
     }
 
   private:
