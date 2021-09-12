@@ -38,9 +38,9 @@ PROTOS_PATH = .
 
 vpath %.proto $(PROTOS_PATH)
 
-all: system-check fetcher server
+all: system-check client server
 
-fetcher: fetch.pb.o fetch.grpc.pb.o fetcher.o
+client: fetch.pb.o fetch.grpc.pb.o fetcher.o client.o
 	$(CXX) $^ $(LDFLAGS) -o $@
 
 server: fetch.pb.o fetch.grpc.pb.o server.o
@@ -55,7 +55,7 @@ server: fetch.pb.o fetch.grpc.pb.o server.o
 	$(PROTOC) -I $(PROTOS_PATH) --cpp_out=. $<
 
 clean:
-	rm -f *.o *.pb.cc *.pb.h fetcher server
+	rm -f *.o *.pb.cc *.pb.h client server
 
 
 # The following is to test your system and ensure a smoother experience.

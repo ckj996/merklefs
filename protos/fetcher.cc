@@ -16,6 +16,8 @@
  *
  */
 
+#include "fetcher.hpp"
+
 #include <iostream>
 #include <memory>
 #include <string>
@@ -29,56 +31,27 @@ using fetch::FetchRequest;
 using fetch::FetchService;
 using namespace grpc;
 
-class Fetcher
+Fetcher::Fetcher(const std::string& url) {
+    const auto& channel = CreateChannel(url, InsecureChannelCredentials());
+    stub_ = FetchService::NewStub(channel);
+}
+
+bool Fetcher::fetch(const std::string &key)
 {
-  public:
-    Fetcher(std::string url) {
-        const auto& channel = CreateChannel(url, InsecureChannelCredentials());
-        stub_ = FetchService::NewStub(channel);
-    }
+    // Data we are sending to the server.
+    FetchRequest request;
+    request.set_key(key);
 
-    // Assembles the client's payload, sends it and presents the response back
-    // from the server.
-    bool Fetch(const std::string &key)
-    {
-        // Data we are sending to the server.
-        FetchRequest request;
-        request.set_key(key);
+    // Container for the data we expect from the server.
+    FetchReply reply;
 
-        // Container for the data we expect from the server.
-        FetchReply reply;
+    // Context for the client. It could be used to convey extra information to
+    // the server and/or tweak certain RPC behaviors.
+    ClientContext context;
 
-        // Context for the client. It could be used to convey extra information to
-        // the server and/or tweak certain RPC behaviors.
-        ClientContext context;
+    // The actual RPC.
+    Status status = stub_->Fetch(&context, request, &reply);
 
-        // The actual RPC.
-        Status status = stub_->Fetch(&context, request, &reply);
-
-        // Act upon its status.
-        return status.ok() && reply.ok();
-    }
-
-  private:
-    std::unique_ptr<FetchService::Stub> stub_;
-};
-
-int main(int argc, char **argv)
-{
-    // Instantiate the client. It requires a channel, out of which the actual RPCs
-    // are created. This channel models a connection to an endpoint specified by
-    // the argument "--target=" which is the only expected argument.
-    // We indicate that the channel isn't authenticated (use of
-    // InsecureChannelCredentials()).
-    std::string url = "unix:///tmp/object-fetcher.sock";
-    std::string key = "hello";
-    if (argc > 1)
-    {
-        key = argv[1];
-    }
-    Fetcher fetcher(url);
-    bool reply = fetcher.Fetch(key);
-    std::cout << "Fetcher received: " << (reply ? "OK" : "BAD") << std::endl;
-
-    return 0;
+    // Act upon its status.
+    return status.ok() && reply.ok();
 }
