@@ -27,15 +27,15 @@
 using fetch::FetchReply;
 using fetch::FetchRequest;
 using fetch::FetchService;
-using grpc::Channel;
-using grpc::ClientContext;
-using grpc::Status;
+using namespace grpc;
 
 class Fetcher
 {
   public:
-    Fetcher(std::shared_ptr<Channel> channel)
-        : stub_(FetchService::NewStub(channel)) {}
+    Fetcher(std::string url) {
+        const auto& channel = CreateChannel(url, InsecureChannelCredentials());
+        stub_ = FetchService::NewStub(channel);
+    }
 
     // Assembles the client's payload, sends it and presents the response back
     // from the server.
@@ -79,14 +79,13 @@ int main(int argc, char **argv)
     // the argument "--target=" which is the only expected argument.
     // We indicate that the channel isn't authenticated (use of
     // InsecureChannelCredentials()).
-    std::string target_str = "unix:///tmp/object-fetcher.sock";
+    std::string url = "unix:///tmp/object-fetcher.sock";
     std::string key = "hello";
     if (argc > 1)
     {
         key = argv[1];
     }
-    Fetcher fetcher(
-        grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
+    Fetcher fetcher(url);
     bool reply = fetcher.Fetch(key);
     std::cout << "Fetcher received: " << (reply ? "OK" : "BAD") << std::endl;
 
