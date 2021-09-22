@@ -683,6 +683,8 @@ int main(int argc, char *argv[]) {
     // Don't apply umask, use modes exactly as specified
     umask(0);
 
+    if (!fs.debug)
+        daemon(1, 0);
     // Mount and run main loop
     struct fuse_loop_config loop_config;
     loop_config.clone_fd = 0;
