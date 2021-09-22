@@ -304,12 +304,6 @@ static void mfs_opendir(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi) {
 }
 
 
-static bool is_dot_or_dotdot(const char *name) {
-    return name[0] == '.' &&
-           (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'));
-}
-
-
 void do_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
         off_t offset, fuse_file_info *fi, bool plus)
 {
@@ -339,9 +333,6 @@ void do_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
     ino_t d_ino;
     off_t d_off;
     for (; d->get(&d_name, &d_ino, &d_off); d->next()) {
-        if (is_dot_or_dotdot(d_name))
-            continue;
-        
         fuse_entry_param e {};
         size_t entsize;
         if (plus) {
